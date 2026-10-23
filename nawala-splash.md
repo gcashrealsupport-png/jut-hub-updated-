@@ -1,10 +1,3 @@
-## nawala splash
-
-Source: <https://chat.deepseek.com/share/eitw461irxv7jqgchc>
-
-### Assistant · 23 Oct 2026, 22:20
-
-```lua
 --[[
   JUT HUB — FINAL MASTER BUILD (V3 + Splash + FPS Optimizer)
   - Welcome Splash (🎃)
@@ -756,4 +749,3 @@ UIS.JumpRequest:Connect(function()
 end)
 
 print("[Jut Hub] Loaded — V3 Clone with Splash.")
-```
