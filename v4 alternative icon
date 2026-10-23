@@ -749,4 +749,3 @@ UIS.JumpRequest:Connect(function()
 end)
 
 print("[Jut Hub] Loaded — V3 Clone with Splash.")
-```
