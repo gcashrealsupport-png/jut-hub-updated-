@@ -1,10 +1,3 @@
-## ikaw na ayusin mo JUT HUB idagdag mo sa jut hub yung god mode working…
-
-Source: <https://chat.deepseek.com/share/kybncu98qh1r3eeh8f>
-
-### Assistant · 25 Oct 2026, 15:25
-
-```lua
 --[[
   JUT HUB — FINAL MASTER BUILD (Godmode & Invisible Added)
   - Welcome Splash & Floating Icon (Image ID: 114791040405110)
@@ -827,4 +820,3 @@ UIS.JumpRequest:Connect(function()
 end)
 
 print("[Jut Hub] Loaded — Complete Master Build with Godmode & Invisible.")
-```
