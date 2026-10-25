@@ -1,10 +1,3 @@
-## gumana na pero yung mga laman at yung loading screen or yung welcome …
-
-Source: <https://chat.deepseek.com/share/b6owzcvonemivve3as>
-
-### Assistant · 25 Oct 2026, 12:24
-
-```lua
 --[[
   JUT HUB — FINAL MASTER BUILD (Complete & Working)
   - Welcome Splash (Image ID: 114791040405110)
@@ -774,4 +767,3 @@ UIS.JumpRequest:Connect(function()
 end)
 
 print("[Jut Hub] Loaded — Complete Master Build.")
-```
