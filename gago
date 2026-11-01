@@ -150,6 +150,7 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     end
     return oldNamecall(self, ...)
 end)
+
 -- 8. RENDER LOOP (Aimbot, Cam Lock, TP Lock, Jut Camera TP)
 local floatGui = Instance.new("ScreenGui", CoreGui)
 floatGui.Name = "FloatingTPCam"
