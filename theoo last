@@ -1,9 +1,5 @@
---[[
-  THEOO HUB — Palaiyot si Theoo Edition (Ultimate + Chams ESP)
-  Features: Silent Aim, Aim Assist, Wall Check, Chams ESP, FPS Booster, Godmode, Spoofer
-  + [Ghaith] Speed, Infinite Jump, Hitbox Expander, Rapid Fire, Noclip
-  + [PANN] 100% Aimbot, Max Cam Lock, TP Cam, Strict Team Check
-]]
+-- [[ THEOO X JUT HUB — ULTIMATE FUSION BUILD ]] --
+-- Silent Aim, 100% Aimbot, Max Cam Lock, TP Lock, Camera TP, Chams ESP, Godmode, Auto Redeem, Anti-Ban
 
 if not game:IsLoaded() then game.Loaded:Wait() end
 
@@ -29,36 +25,20 @@ local Workspace        = game:GetService("Workspace")
 local CoreGui          = game:GetService("CoreGui")
 local TweenService     = game:GetService("TweenService")
 local Lighting         = game:GetService("Lighting")
+local ReplicatedStorage= game:GetService("ReplicatedStorage")
 local LocalPlayer      = Players.LocalPlayer
 local Camera           = Workspace.CurrentCamera
 
--- 2. SPLASH
-local oldSplash = CoreGui:FindFirstChild("TheooSplash")
-if oldSplash then oldSplash:Destroy() end
-local SplashGui = Instance.new("ScreenGui", CoreGui)
-SplashGui.Name = "TheooSplash"; SplashGui.ResetOnSpawn = false; SplashGui.IgnoreGuiInset = true
-local SplashBg = Instance.new("Frame", SplashGui)
-SplashBg.Size = UDim2.new(1,0,1,0); SplashBg.BackgroundColor3 = Color3.fromRGB(10,10,15); SplashBg.BorderSizePixel = 0
-local SplashText = Instance.new("TextLabel", SplashBg)
-SplashText.Size = UDim2.new(1,0,0,60); SplashText.Position = UDim2.new(0,0,0.5,-30)
-SplashText.BackgroundTransparency = 1; SplashText.Text = "Palaiyot si Theoo"
-SplashText.TextColor3 = Color3.fromRGB(200,200,255); SplashText.Font = Enum.Font.GothamBlack; SplashText.TextSize = 32; SplashText.TextTransparency = 1
-TweenService:Create(SplashText, TweenInfo.new(0.5), {TextTransparency=0}):Play()
-task.delay(2.5, function()
-    TweenService:Create(SplashBg, TweenInfo.new(0.5), {BackgroundTransparency=1}):Play()
-    TweenService:Create(SplashText, TweenInfo.new(0.5), {TextTransparency=1}):Play()
-    task.wait(0.5); SplashGui:Destroy()
-end)
-
--- 3. CONFIG & VARIABLES
+-- 2. CONFIG & VARIABLES
 local Config = {
     SilentAim = false, FovSize = 200, WallCheck = true,
     AimAssist = false, AimAssistSmooth = 5,
-    Aimbot100 = false, MaxCamLock = false, TPCam = false,
+    Aimbot100 = false, MaxCamLock = false, TPCam = false, TPLock = false, CameraTP = false, TPCamSpeed = 140,
     StretchRes = false, StretchValue = 0.65,
     Godmode = false, Chams = false, FPSBoost = false, Minecraft = false,
     Speed = false, SpeedValue = 100, InfJump = false,
-    Hitbox = false, HitboxSize = 20, RapidFire = false, Noclip = false
+    Hitbox = false, HitboxSize = 20, RapidFire = false, Noclip = false,
+    AntiBan = false, AutoRedeem = false
 }
 local SilentTarget = nil
 local GodmodeConns = {}
@@ -66,7 +46,7 @@ local mcRestores = {}
 local SavedSettings = {}
 local PlayerChams = {}
 
--- 4. TEAM CHECK (Strict)
+-- 3. TEAM CHECK (Strict)
 local function IsTeammate(TargetPlayer)
     if not TargetPlayer or TargetPlayer == LocalPlayer then return true end
     local LC = LocalPlayer.Character
@@ -84,7 +64,7 @@ local function IsTeammate(TargetPlayer)
     return LocalPlayer.Team ~= nil and TargetPlayer.Team == LocalPlayer.Team
 end
 
--- 5. WALL CHECK FUNCTION
+-- 4. WALL CHECK
 local function IsVisible(targetPart)
     if not targetPart then return false end
     local origin = Camera.CFrame.Position
@@ -97,7 +77,7 @@ local function IsVisible(targetPart)
     return result == nil
 end
 
--- 6. TARGETING LOGIC (May Wall Check)
+-- 5. TARGETING LOGIC
 local function GetTarget()
     local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
     local bestPart, bestScore = nil, math.huge
@@ -120,7 +100,7 @@ local function GetTarget()
     return bestPart
 end
 
--- 7. SILENT AIM
+-- 6. SILENT AIM HOOK
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local method = getnamecallmethod()
@@ -150,12 +130,44 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     return oldNamecall(self, ...)
 end)
 
--- 8. RENDER LOOP (Aim Assist, 100% Aimbot, Max Cam Lock, TP Cam)
-RunService.RenderStepped:Connect(function()
+-- 7. CAMERA TP & RENDER LOOP
+local tpCamConn = nil
+local tpCamRotation = CFrame.new()
+local moveVec = Vector3.new(0,0,0)
+
+UserInputService.InputChanged:Connect(function(input)
+    if Config.CameraTP and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) and input.Delta then
+        tpCamRotation = tpCamRotation * CFrame.Angles(0, math.rad(-input.Delta.X * 0.4), 0) * CFrame.Angles(math.rad(-input.Delta.Y * 0.4), 0, 0)
+    end
+end)
+
+RunService.RenderStepped:Connect(function(dt)
     if Config.SilentAim then SilentTarget = GetTarget() else SilentTarget = nil end
     local targetPart = GetTarget()
-    
-    if targetPart then
+
+    if Config.CameraTP then
+        Camera.CameraType = Enum.CameraType.Scriptable
+        if not tpCamConn then
+            tpCamConn = RunService.RenderStepped:Connect(function(d)
+                local c = Workspace.CurrentCamera
+                local move = Vector3.new(0,0,0)
+                if UserInputService:IsKeyDown(Enum.KeyCode.W) then move += tpCamRotation.LookVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.S) then move -= tpCamRotation.LookVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.A) then move -= tpCamRotation.RightVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.D) then move += tpCamRotation.RightVector end
+                
+                if move.Magnitude > 0 then c.CFrame = CFrame.new(c.CFrame.Position + move.Unit * Config.TPCamSpeed * d) * tpCamRotation else c.CFrame = CFrame.new(c.CFrame.Position) * tpCamRotation end
+            end)
+        end
+    else
+        if tpCamConn then tpCamConn:Disconnect(); tpCamConn = nil end
+        if Camera.CameraType == Enum.CameraType.Scriptable then
+            Camera.CameraType = Enum.CameraType.Custom
+            if LocalPlayer.Character then Camera.CameraSubject = LocalPlayer.Character:FindFirstChildOfClass("Humanoid") end
+        end
+    end
+
+    if targetPart and not Config.CameraTP then
         if Config.AimAssist then
             local smoothFactor = math.clamp(1 / Config.AimAssistSmooth, 0.01, 1)
             local newCFrame = CFrame.lookAt(Camera.CFrame.Position, targetPart.Position)
@@ -167,37 +179,17 @@ RunService.RenderStepped:Connect(function()
         if Config.MaxCamLock then
             Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetPart.Position)
         end
-        if Config.TPCam then
-            Camera.CFrame = targetPart.CFrame * CFrame.new(0, 5, 10)
+        if Config.TPLock then
+            local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local targetPos = targetPart.Position - (Camera.CFrame.LookVector * 10)
+                hrp.CFrame = CFrame.new(targetPos, targetPart.Position)
+            end
         end
     end
 end)
--- 9. FPS BOOSTER
-local function ToggleFPSBoost(state)
-    if state then
-        SavedSettings.GlobalShadows = Lighting.GlobalShadows
-        SavedSettings.FogEnd = Lighting.FogEnd
-        SavedSettings.Quality = settings().Rendering.QualityLevel
-        Lighting.GlobalShadows = false
-        Lighting.FogEnd = 9e9
-        Lighting.EnvironmentDiffuseScale = 0
-        Lighting.EnvironmentSpecularScale = 0
-        settings().Rendering.QualityLevel = Enum.RenderingQualityLevel.Level01
-        for _, obj in ipairs(Workspace:GetDescendants()) do
-            if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Smoke") or obj:IsA("Fire") then
-                obj.Enabled = false
-            end
-        end
-    else
-        Lighting.GlobalShadows = SavedSettings.GlobalShadows
-        Lighting.FogEnd = SavedSettings.FogEnd
-        settings().Rendering.QualityLevel = SavedSettings.Quality
-        Lighting.EnvironmentDiffuseScale = 1
-        Lighting.EnvironmentSpecularScale = 1
-    end
-end
 
--- 10. CHAMS ESP (Solid Glow)
+-- 8. CHAMS ESP
 local function UpdateChams()
     if not Config.Chams then
         for _, hl in pairs(PlayerChams) do
@@ -234,39 +226,30 @@ local function UpdateChams()
         end
     end
 end
-
--- 11. GODMODE
-local function getRoot() return LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") end
-local function ToggleGodmode(state)
-    for _, conn in ipairs(GodmodeConns) do if conn then conn:Disconnect() end end
-    GodmodeConns = {}
-    if not state then return end
-    table.insert(GodmodeConns, RunService.Heartbeat:Connect(function()
-        local hrp = getRoot()
-        if not hrp then return end
-        hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(0.5), 0)
-        local old = hrp.Velocity
-        hrp.Velocity = Vector3.new(0, -16384, 0)
-        RunService.RenderStepped:Wait()
-        hrp.Velocity = old
-    end))
-    table.insert(GodmodeConns, RunService.Stepped:Connect(function()
-        task.wait(0.1)
-        local hrp = getRoot()
-        if not hrp then return end
-        local old = hrp.AssemblyLinearVelocity
-        hrp.AssemblyLinearVelocity = Vector3.new(math.random(-2000, 6000), math.random(-13000, 3000), math.random(-6000, 2000))
-        RunService.RenderStepped:Wait()
-        hrp.AssemblyLinearVelocity = old
-    end))
-end
-
--- 12. STRETCH & MINECRAFT
-RunService.RenderStepped:Connect(function()
-    if Config.StretchRes then
-        Camera.CFrame = Camera.CFrame * CFrame.new(0, 0, 0, 1, 0, 0, 0, Config.StretchValue, 0, 0, 0, 1)
+-- 9. FPS BOOSTER & MINECRAFT
+local function ToggleFPSBoost(state)
+    if state then
+        SavedSettings.GlobalShadows = Lighting.GlobalShadows
+        SavedSettings.FogEnd = Lighting.FogEnd
+        SavedSettings.Quality = settings().Rendering.QualityLevel
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 9e9
+        Lighting.EnvironmentDiffuseScale = 0
+        Lighting.EnvironmentSpecularScale = 0
+        settings().Rendering.QualityLevel = Enum.RenderingQualityLevel.Level01
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Smoke") or obj:IsA("Fire") then
+                obj.Enabled = false
+            end
+        end
+    else
+        Lighting.GlobalShadows = SavedSettings.GlobalShadows
+        Lighting.FogEnd = SavedSettings.FogEnd
+        settings().Rendering.QualityLevel = SavedSettings.Quality
+        Lighting.EnvironmentDiffuseScale = 1
+        Lighting.EnvironmentSpecularScale = 1
     end
-end)
+end
 
 local textures = { Slate="rbxassetid://8676746437", Grass="rbxassetid://9267183930", Sand="rbxassetid://12624140843", Wood="rbxassetid://3258599312", Brick="rbxassetid://10777285622", Concrete="rbxassetid://15622710576", CorrodedMetal="rbxassetid://7861269583", Metal="rbxassetid://12165061309", WoodPlanks="rbxassetid://8676581022" }
 local function ToggleMinecraft(state)
@@ -292,23 +275,34 @@ local function ToggleMinecraft(state)
     end
 end
 
--- 13. DEVICE SPOOFER
-local function ToggleDeviceSpoofer(state)
+-- 10. GODMODE
+local function getRoot() return LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") end
+local function ToggleGodmode(state)
+    for _, conn in ipairs(GodmodeConns) do if conn then conn:Disconnect() end end
+    GodmodeConns = {}
     if not state then return end
-    local remote = game:GetService("ReplicatedStorage"):WaitForChild("PVP_DeviceReport", 5)
-    if remote then
-        local old
-        old = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
-            if self == remote and getnamecallmethod() == "FireServer" and not checkcaller() then return old(self, "Computer") end
-            return old(self, ...)
-        end))
-        remote:FireServer("Computer")
-    end
+    table.insert(GodmodeConns, RunService.Heartbeat:Connect(function()
+        local hrp = getRoot()
+        if not hrp then return end
+        hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(0.5), 0)
+        local old = hrp.Velocity
+        hrp.Velocity = Vector3.new(0, -16384, 0)
+        RunService.RenderStepped:Wait()
+        hrp.Velocity = old
+    end))
+    table.insert(GodmodeConns, RunService.Stepped:Connect(function()
+        task.wait(0.1)
+        local hrp = getRoot()
+        if not hrp then return end
+        local old = hrp.AssemblyLinearVelocity
+        hrp.AssemblyLinearVelocity = Vector3.new(math.random(-2000, 6000), math.random(-13000, 3000), math.random(-6000, 2000))
+        RunService.RenderStepped:Wait()
+        hrp.AssemblyLinearVelocity = old
+    end))
 end
 
--- 13.5 [Ghaith] SPEED / INF JUMP / HITBOX / RAPID FIRE / NOCLIP
+-- 11. SPEED & JUMP & NOCLIP
 local defaultSpeed = 16
-
 local function ApplySpeed()
     local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
     if not hum then return end
@@ -331,115 +325,58 @@ end)
 
 local noclipConnection = nil
 local function ToggleNoclip(state)
-    if noclipConnection then
-        noclipConnection:Disconnect()
-        noclipConnection = nil
-    end
+    if noclipConnection then noclipConnection:Disconnect(); noclipConnection = nil end
     if not state then
         local char = LocalPlayer.Character
-        if char then
-            for _, part in ipairs(char:GetDescendants()) do
-                if part:IsA("BasePart") then part.CanCollide = true end
-            end
-        end
+        if char then for _, part in ipairs(char:GetDescendants()) do if part:IsA("BasePart") then part.CanCollide = true end end end
         return
     end
     noclipConnection = RunService.Stepped:Connect(function()
         local char = LocalPlayer.Character
         if not char then return end
-        for _, part in ipairs(char:GetDescendants()) do
-            if part:IsA("BasePart") and part.CanCollide then part.CanCollide = false end
-        end
+        for _, part in ipairs(char:GetDescendants()) do if part:IsA("BasePart") and part.CanCollide then part.CanCollide = false end end
     end)
 end
 
-local originalHitboxSizes = {}
-local function ResetHitboxes()
-    for _, other in ipairs(Players:GetPlayers()) do
-        if other ~= LocalPlayer and other.Character then
-            local hrp = other.Character:FindFirstChild("HumanoidRootPart")
-            if hrp and originalHitboxSizes[other] then
-                hrp.Size = originalHitboxSizes[other].size
-                hrp.Transparency = originalHitboxSizes[other].transparency
-                hrp.CanCollide = originalHitboxSizes[other].canCollide
-                originalHitboxSizes[other] = nil
+-- 12. AUTO REDEEM (ALKEDION PVP SPECIFIC)
+local function RedeemAlkedionCodes()
+    local Codes = {
+        "ALKEDION", "RELEASE", "UPDATE1", "WELCOME", "THANKS", 
+        "FREESTUFF", "SEASON1", "100K", "50K", "PVP", "ALKY"
+    }
+    
+    local foundRemote = nil
+    -- Look for Redeem remote in ReplicatedStorage
+    for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
+        if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+            local n = string.lower(obj.Name)
+            if string.find(n, "redeem") or string.find(n, "code") or string.find(n, "promo") then
+                foundRemote = obj
+                break
             end
         end
     end
-end
-
-local function UpdateHitboxes()
-    for _, other in ipairs(Players:GetPlayers()) do
-        if other ~= LocalPlayer and other.Character then
-            local hrp = other.Character:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                if Config.Hitbox then
-                    if not originalHitboxSizes[other] then
-                        originalHitboxSizes[other] = { size = hrp.Size, transparency = hrp.Transparency, canCollide = hrp.CanCollide }
-                    end
-                    local s = Config.HitboxSize
-                    hrp.Size = Vector3.new(s, s, s)
-                    hrp.Transparency = 0.7
-                    hrp.CanCollide = false
-                elseif originalHitboxSizes[other] then
-                    hrp.Size = originalHitboxSizes[other].size
-                    hrp.Transparency = originalHitboxSizes[other].transparency
-                    hrp.CanCollide = originalHitboxSizes[other].canCollide
-                    originalHitboxSizes[other] = nil
+    
+    if foundRemote then
+        print("[PANN] Found Alkedion Redeem Remote: " .. foundRemote:GetFullName())
+        for _, code in ipairs(Codes) do
+            pcall(function()
+                if foundRemote:IsA("RemoteEvent") then
+                    foundRemote:FireServer(code)
+                else
+                    foundRemote:InvokeServer(code)
                 end
-            end
+            end)
+            task.wait(0.5) -- Delay para hindi ma-kick sa spam
         end
-    end
-end
-
-RunService.Heartbeat:Connect(function()
-    if Config.Hitbox then UpdateHitboxes() end
-end)
-
-local rapidFireConnections = {}
-local function ApplyToTool(tool)
-    if not tool:IsA("Tool") then return end
-    if Config.RapidFire then
-        tool:SetAttribute("RateOfFire", 100000)
-        tool:SetAttribute("rateOfFire", 100000)
     else
-        tool:SetAttribute("RateOfFire", nil)
-        tool:SetAttribute("rateOfFire", nil)
+        warn("[PANN] Alkedion Redeem remote not found.")
     end
 end
 
-local function WatchContainer(container)
-    if not container then return end
-    for _, item in ipairs(container:GetChildren()) do ApplyToTool(item) end
-    local conn = container.ChildAdded:Connect(ApplyToTool)
-    table.insert(rapidFireConnections, conn)
-end
-
-local function SetupRapidFire(character)
-    for _, conn in ipairs(rapidFireConnections) do conn:Disconnect() end
-    table.clear(rapidFireConnections)
-    WatchContainer(character)
-    WatchContainer(LocalPlayer:WaitForChild("Backpack"))
-end
-
-if LocalPlayer.Character then SetupRapidFire(LocalPlayer.Character) end
-LocalPlayer.CharacterAdded:Connect(SetupRapidFire)
-
-local function ReapplyRapidFire()
-    local char = LocalPlayer.Character
-    if char then for _, item in ipairs(char:GetChildren()) do ApplyToTool(item) end end
-    local bp = LocalPlayer:FindFirstChild("Backpack")
-    if bp then for _, item in ipairs(bp:GetChildren()) do ApplyToTool(item) end end
-end
-
-LocalPlayer.CharacterAdded:Connect(function()
-    task.wait(0.5)
-    ApplySpeed()
-end)
-
--- 14. MODERN UI
+-- 13. MODERN UI
 local Gui = Instance.new("ScreenGui", CoreGui)
-Gui.Name = "TheooHubCool"; Gui.ResetOnSpawn = false
+Gui.Name = "TheooJutFusion"; Gui.ResetOnSpawn = false
 
 local Main = Instance.new("Frame", Gui)
 Main.Size = UDim2.new(0, 500, 0, 340)
@@ -449,7 +386,6 @@ Main.BorderSizePixel = 0
 Main.Active = true
 Main.Visible = false
 Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 12)
-Instance.new("UIStroke", Main).Color = Color3.fromRGB(80, 80, 100)
 
 local TopBar = Instance.new("Frame", Main)
 TopBar.Size = UDim2.new(1, 0, 0, 40)
@@ -461,7 +397,7 @@ local Title = Instance.new("TextLabel", TopBar)
 Title.Size = UDim2.new(1, -100, 1, 0)
 Title.Position = UDim2.new(0, 20, 0, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "Theoo Hub | Ultimate"
+Title.Text = "Theoo x Jut Fusion"
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 16
@@ -486,7 +422,6 @@ Instance.new("UICorner", Sidebar).CornerRadius = UDim.new(0, 8)
 local TabList = Instance.new("UIListLayout", Sidebar)
 TabList.Padding = UDim.new(0, 5)
 TabList.HorizontalAlignment = Enum.HorizontalAlignment.Center
-TabList.SortOrder = Enum.SortOrder.LayoutOrder
 
 local Content = Instance.new("Frame", Main)
 Content.Size = UDim2.new(1, -140, 1, -50)
@@ -503,7 +438,6 @@ local function CreatePage(name)
     page.Position = UDim2.new(0, 5, 0, 5)
     page.BackgroundTransparency = 1
     page.ScrollBarThickness = 2
-    page.ScrollBarImageColor3 = Color3.fromRGB(100, 100, 120)
     page.CanvasSize = UDim2.new(0, 0, 0, 0)
     page.AutomaticCanvasSize = Enum.AutomaticSize.Y
     page.Visible = false
@@ -551,54 +485,22 @@ local function CreateToggle(parent, text, default, callback)
     end)
 end
 
-local function CreateSlider(parent, text, min, max, default, callback)
-    local frame = Instance.new("Frame", parent)
-    frame.Size = UDim2.new(1, 0, 0, 45)
-    frame.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
-    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 6)
-
-    local label = Instance.new("TextLabel", frame)
-    label.Size = UDim2.new(0.7, 0, 0, 20)
-    label.Position = UDim2.new(0, 12, 0, 4)
-    label.BackgroundTransparency = 1
-    label.Text = text .. ": " .. default
-    label.TextColor3 = Color3.fromRGB(200, 200, 210)
-    label.Font = Enum.Font.GothamMedium
-    label.TextSize = 12
-    label.TextXAlignment = Enum.TextXAlignment.Left
-
-    local bar = Instance.new("Frame", frame)
-    bar.Size = UDim2.new(1, -24, 0, 4)
-    bar.Position = UDim2.new(0, 12, 1, -15)
-    bar.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
-    Instance.new("UICorner", bar).CornerRadius = UDim.new(1, 0)
-
-    local fill = Instance.new("Frame", bar)
-    fill.Size = UDim2.new((default-min)/(max-min), 0, 1, 0)
-    fill.BackgroundColor3 = Color3.fromRGB(255, 60, 90)
-    Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
-
-    local dragging = false
-    bar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = true end
-    end)
-    UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
-    end)
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            local rel = math.clamp((input.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
-            local val = math.floor(min + (max-min)*rel + 0.5)
-            fill.Size = UDim2.new(rel, 0, 1, 0)
-            label.Text = text .. ": " .. val
-            callback(val)
-        end
-    end)
+local function CreateButton(parent, text, callback)
+    local btn = Instance.new("TextButton", parent)
+    btn.Size = UDim2.new(1, 0, 0, 32)
+    btn.BackgroundColor3 = Color3.fromRGB(40, 120, 70)
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 13
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+    btn.MouseButton1Click:Connect(callback)
 end
 
 local CombatPage = CreatePage("Combat")
 local VisualPage = CreatePage("Visual")
 local MiscPage = CreatePage("Misc")
+local RedeemPage = CreatePage("Redeem")
 
 local function SelectTab(page, btn)
     for _, p in pairs(Pages) do p.Visible = false end
@@ -629,55 +531,40 @@ end
 local btnCombat = CreateTabButton("Combat", CombatPage)
 local btnVisual = CreateTabButton("Visual", VisualPage)
 local btnMisc = CreateTabButton("Misc", MiscPage)
+local btnRedeem = CreateTabButton("Redeem", RedeemPage)
 SelectTab(CombatPage, btnCombat)
-
--- UI Filling (PANN Additions Included)
+-- 14. UI FILLING & ALKEDION REDEEM
 CreateToggle(CombatPage, "Silent Aim", false, function(v) Config.SilentAim = v end)
 CreateToggle(CombatPage, "100% Aimbot", false, function(v) Config.Aimbot100 = v end)
 CreateToggle(CombatPage, "Max Cam Lock", false, function(v) Config.MaxCamLock = v end)
-CreateToggle(CombatPage, "TP Cam", false, function(v) Config.TPCam = v end)
+CreateToggle(CombatPage, "TP Cam (Fly)", false, function(v) Config.TPCam = v end)
+CreateToggle(CombatPage, "TP Lock (Follow)", false, function(v) Config.TPLock = v end)
 CreateToggle(CombatPage, "Aim Assist", false, function(v) Config.AimAssist = v end)
-CreateSlider(CombatPage, "Assist Smoothness", 1, 20, 5, function(v) Config.AimAssistSmooth = v end)
 CreateToggle(CombatPage, "Wall Check", true, function(v) Config.WallCheck = v end)
-CreateSlider(CombatPage, "FOV Size", 50, 500, 200, function(v) Config.FovSize = v end)
 CreateToggle(CombatPage, "Godmode", false, ToggleGodmode)
-CreateToggle(CombatPage, "Hitbox Expander", false, function(v)
-    Config.Hitbox = v
-    if not v then ResetHitboxes() end
-end)
-CreateSlider(CombatPage, "Hitbox Size", 5, 50, 20, function(v) Config.HitboxSize = v end)
-CreateToggle(CombatPage, "Rapid Fire", false, function(v)
-    Config.RapidFire = v
-    ReapplyRapidFire()
-end)
 
 CreateToggle(VisualPage, "Chams ESP", false, function(v) Config.Chams = v end)
 CreateToggle(VisualPage, "FPS Booster", false, ToggleFPSBoost)
-CreateToggle(VisualPage, "Stretched Res", false, function(v) Config.StretchRes = v end)
-CreateSlider(VisualPage, "Stretch Value", 0.1, 1.5, 0.65, function(v) Config.StretchValue = v end)
-CreateToggle(VisualPage, "Real Minecraft", false, ToggleMinecraft)
+CreateToggle(VisualPage, "Minecraft Mode", false, ToggleMinecraft)
 
-CreateToggle(MiscPage, "Device Spoofer", false, ToggleDeviceSpoofer)
-CreateToggle(MiscPage, "Speed", false, function(v)
-    Config.Speed = v
-    ApplySpeed()
-end)
-CreateSlider(MiscPage, "Speed Value", 16, 500, 100, function(v)
-    Config.SpeedValue = v
-    ApplySpeed()
-end)
+CreateToggle(MiscPage, "Speed Hack", false, function(v) Config.Speed = v; ApplySpeed() end)
 CreateToggle(MiscPage, "Infinite Jump", false, function(v) Config.InfJump = v end)
 CreateToggle(MiscPage, "Noclip", false, function(v) Config.Noclip = v; ToggleNoclip(v) end)
+
+-- ALKEDION REDEEM BUTTON
+CreateButton(RedeemPage, "REDEEM ALKEDION CODES", function()
+    RedeemAlkedionCodes()
+end)
 
 -- 15. DRAG & ICON
 local dragging, dragInput, dragStart, startPos
 TopBar.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         dragging = true; dragStart = input.Position; startPos = Main.Position
     end
 end)
 TopBar.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement then dragInput = input end
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
 end)
 UserInputService.InputChanged:Connect(function(input)
     if input == dragInput and dragging then
@@ -685,7 +572,9 @@ UserInputService.InputChanged:Connect(function(input)
         Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
     end
 end)
-TopBar.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
+TopBar.InputEnded:Connect(function(input) 
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end 
+end)
 
 local Icon = Instance.new("TextButton", Gui)
 Icon.Size = UDim2.new(0, 45, 0, 45)
@@ -699,10 +588,9 @@ Instance.new("UICorner", Icon).CornerRadius = UDim.new(1, 0)
 Instance.new("UIStroke", Icon).Color = Color3.fromRGB(255, 255, 255)
 Icon.Activated:Connect(function() Main.Visible = not Main.Visible end)
 
--- 16. MAIN LOOP
+-- 16. MAIN LOOP FOR ESP
 RunService.RenderStepped:Connect(function()
-    if Config.SilentAim then SilentTarget = GetTarget() else SilentTarget = nil end
     UpdateChams()
 end)
 
-print("[Theoo Hub] Ultimate + Chams + Ghaith additions Loaded.")
+print("[Theoo x Jut Fusion] Loaded! Alkedion Redeem ready.")
