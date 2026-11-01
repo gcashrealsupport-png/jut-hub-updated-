@@ -1,6 +1,6 @@
 --[[
   THEOO HUB — Palaiyot si Theoo Edition (Ultimate + Chams ESP + PANN Additions)
-  Features: Silent Aim, Aim Assist, Wall Check, Chams ESP, FPS Booster, Godmode, Spoofer, Hitbox, Aimbot, Cam Lock, Camera TP, TP Lock, Alkedion Redeemer
+  Features: Silent Aim, Aim Assist, Wall Check, Chams ESP, FPS Booster, Godmode, Spoofer, Hitbox, 100% Aimbot, Cam Lock, TP Lock, Jut-Style Camera TP, Alkedion Redeemer
 ]]
 
 if not game:IsLoaded() then game.Loaded:Wait() end
@@ -53,7 +53,7 @@ end)
 local Config = {
     SilentAim = false, FovSize = 200, WallCheck = true,
     AimAssist = false, AimAssistSmooth = 5,
-    Aimbot100 = false, MaxCamLock = false, TPCam = false, TPLock = false, CameraTP = false, TPCamSpeed = 140,
+    Aimbot100 = false, MaxCamLock = false, TPLock = false, CameraActive = false,
     StretchRes = false, StretchValue = 0.65,
     Godmode = false, Chams = false, FPSBoost = false, Minecraft = false,
     Speed = false, SpeedValue = 100, InfJump = false,
@@ -64,8 +64,6 @@ local GodmodeConns = {}
 local mcRestores = {}
 local SavedSettings = {}
 local PlayerChams = {}
-local tpCamConn = nil
-local tpCamRotation = CFrame.new()
 
 -- 4. TEAM CHECK (Strict)
 local function IsTeammate(TargetPlayer)
@@ -150,31 +148,26 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     end
     return oldNamecall(self, ...)
 end)
-
--- 8. RENDER LOOP (Aimbot, Cam Lock, TP Lock, Jut Camera TP)
+-- 8. RENDER LOOP & JUT STYLE FLOATING CAMERA TP
 local floatGui = Instance.new("ScreenGui", CoreGui)
 floatGui.Name = "FloatingTPCam"
 floatGui.ResetOnSpawn = false
-floatGui.Enabled = false
 
 local tpCamBtn = Instance.new("TextButton", floatGui)
 tpCamBtn.Size = UDim2.fromOffset(100, 40)
 tpCamBtn.Position = UDim2.new(0, 20, 0.5, 50)
-tpCamBtn.BackgroundColor3 = Color3.fromRGB(155, 90, 255) -- Purple default
+tpCamBtn.BackgroundColor3 = Color3.fromRGB(155, 90, 255) -- Purple
 tpCamBtn.Text = "TP CAM"
 tpCamBtn.TextColor3 = Color3.new(1,1,1)
 tpCamBtn.Font = Enum.Font.GothamBold
 tpCamBtn.TextSize = 12
 Instance.new("UICorner", tpCamBtn).CornerRadius = UDim.new(0, 8)
 
-local moveVec = Vector3.new(0,0,0)
-local lookTouch = nil
 local mobileCtrl = Instance.new("Frame", floatGui)
 mobileCtrl.Size = UDim2.fromScale(1,1)
 mobileCtrl.BackgroundTransparency = 1
 mobileCtrl.Visible = false
 
--- Joystick for movement
 local stick = Instance.new("Frame", mobileCtrl)
 stick.Size = UDim2.fromOffset(100, 100)
 stick.Position = UDim2.new(0, 30, 1, -130)
@@ -189,7 +182,6 @@ knob.BackgroundColor3 = Color3.fromRGB(155, 90, 255)
 knob.BackgroundTransparency = 0.2
 Instance.new("UICorner", knob).CornerRadius = UDim.new(1,0)
 
--- Up/Down buttons
 local upBtn = Instance.new("TextButton", mobileCtrl)
 upBtn.Size = UDim2.fromOffset(40, 40)
 upBtn.Position = UDim2.new(1, -60, 1, -180)
@@ -208,14 +200,14 @@ downBtn.TextColor3 = Color3.new(1,1,1)
 downBtn.TextSize = 20
 Instance.new("UICorner", downBtn).CornerRadius = UDim.new(0,8)
 
--- Look frame
 local lookFrame = Instance.new("TextButton", mobileCtrl)
 lookFrame.Size = UDim2.new(0.6, 0, 1, 0)
 lookFrame.Position = UDim2.new(0.4, 0, 0, 0)
 lookFrame.BackgroundTransparency = 1
 lookFrame.Text = ""
 
-local _up, _down, stickTouch, stickStart = false, false, nil, nil
+local moveVec, _up, _down, lookTouch, stickTouch, stickStart = Vector3.new(0,0,0), false, false, nil, nil, nil
+local tpCamConn, tpCamRotation = nil, CFrame.new()
 
 stick.InputBegan:Connect(function(input) 
     if input.UserInputType == Enum.UserInputType.Touch then 
@@ -248,7 +240,7 @@ lookFrame.InputBegan:Connect(function(input)
 end)
 
 UserInputService.InputChanged:Connect(function(input) 
-    if Config.CameraTP and lookTouch and input == lookTouch and input.Delta then 
+    if Config.CameraActive and lookTouch and input == lookTouch and input.Delta then 
         tpCamRotation = tpCamRotation * CFrame.Angles(0, math.rad(-input.Delta.X * 0.4), 0) * CFrame.Angles(math.rad(-input.Delta.Y * 0.4), 0, 0) 
     end 
 end)
@@ -326,12 +318,12 @@ tpCamBtn.Activated:Connect(function()
     end
 end)
 
--- RENDER LOOP
+-- MAIN RENDER LOOP
 RunService.RenderStepped:Connect(function(dt)
     if Config.SilentAim then SilentTarget = GetTarget() else SilentTarget = nil end
     local targetPart = GetTarget()
 
-    -- Aiming Logic (Kapag hindi naka Camera TP)
+    -- Aiming & Locking Logic (Disables if Camera TP is active)
     if targetPart and not Config.CameraActive then
         if Config.AimAssist then
             local smoothFactor = math.clamp(1 / Config.AimAssistSmooth, 0.01, 1)
@@ -756,15 +748,9 @@ SelectTab(CombatPage, btnCombat)
 
 -- UI FILLING
 CreateToggle(CombatPage, "Silent Aim", false, function(v) Config.SilentAim = v end)
-CreateToggle(CombatPage, "100% Aimbot", false, function(v) Config.Aimbot100 = v end
+CreateToggle(CombatPage, "100% Aimbot", false, function(v) Config.Aimbot100 = v end)
+CreateToggle(CombatPage, "Max Cam Lock", false, function(v) Config.MaxCamLock = v end)
 CreateToggle(CombatPage, "TP Lock (Follow)", false, function(v) Config.TPLock = v end)
-CreateToggle(CombatPage, "Camera TP (Fly)", false, function(v) 
-    Config.CameraTP = v
-    floatGui.Enabled = v
-    if not v and Config.CameraActive then
-        StopTPCam() -- Para bumalik sa normal kung biglang i-off
-    end
-end)
 CreateToggle(CombatPage, "Aim Assist", false, function(v) Config.AimAssist = v end)
 CreateSlider(CombatPage, "Aim Smoothness", 1, 20, 5, function(v) Config.AimAssistSmooth = v end)
 CreateToggle(CombatPage, "Wall Check", true, function(v) Config.WallCheck = v end)
