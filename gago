@@ -1,6 +1,6 @@
 --[[
-  THEOO HUB — Palaiyot si Theoo Edition (Ultimate + Chams ESP + PANN Additions)
-  Features: Silent Aim, Aim Assist, Wall Check, Chams ESP, FPS Booster, Godmode, Spoofer, Hitbox, 100% Aimbot, Cam Lock, TP Lock, Jut-Style Camera TP, Alkedion Redeemer
+  THEOO HUB — Ultimate Fusion (Theoo x Jut x PANN)
+  Features: Silent Aim, Aimbot, Cam Lock, Camera TP (TP Tab Toggle), Hitbox, Rapid Fire, Alkedion Redeemer
 ]]
 
 if not game:IsLoaded() then game.Loaded:Wait() end
@@ -53,7 +53,7 @@ end)
 local Config = {
     SilentAim = false, FovSize = 200, WallCheck = true,
     AimAssist = false, AimAssistSmooth = 5,
-    Aimbot100 = false, MaxCamLock = false, TPLock = false, CameraActive = false,
+    Aimbot100 = false, MaxCamLock = false, CameraActive = false, FloatTPGui = false,
     StretchRes = false, StretchValue = 0.65,
     Godmode = false, Chams = false, FPSBoost = false, Minecraft = false,
     Speed = false, SpeedValue = 100, InfJump = false,
@@ -152,6 +152,7 @@ end)
 local floatGui = Instance.new("ScreenGui", CoreGui)
 floatGui.Name = "FloatingTPCam"
 floatGui.ResetOnSpawn = false
+floatGui.Enabled = false
 
 local tpCamBtn = Instance.new("TextButton", floatGui)
 tpCamBtn.Size = UDim2.fromOffset(100, 40)
@@ -323,7 +324,11 @@ RunService.RenderStepped:Connect(function(dt)
     if Config.SilentAim then SilentTarget = GetTarget() else SilentTarget = nil end
     local targetPart = GetTarget()
 
-    -- Aiming & Locking Logic (Disables if Camera TP is active)
+    -- Sync Camera TP GUI
+    floatGui.Enabled = Config.FloatTPGui
+    if not Config.FloatTPGui and Config.CameraActive then StopTPCam() end
+
+    -- Aiming Logic (No TP Lock)
     if targetPart and not Config.CameraActive then
         if Config.AimAssist then
             local smoothFactor = math.clamp(1 / Config.AimAssistSmooth, 0.01, 1)
@@ -335,13 +340,6 @@ RunService.RenderStepped:Connect(function(dt)
         end
         if Config.MaxCamLock then
             Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetPart.Position)
-        end
-        if Config.TPLock then
-            local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                local targetPos = targetPart.Position - (Camera.CFrame.LookVector * 10)
-                hrp.CFrame = CFrame.new(targetPos, targetPart.Position)
-            end
         end
     end
     
@@ -477,7 +475,37 @@ function UpdateHitboxes()
     end
 end
 
--- 13. SPEED / INF JUMP / NOCLIP
+-- 13. RAPID FIRE
+local rfConnections = {}
+local function ApplyToTool(tool)
+    if not tool:IsA("Tool") then return end
+    if Config.RapidFire then
+        tool:SetAttribute("RateOfFire", 100000)
+        tool:SetAttribute("rateOfFire", 100000)
+    else
+        tool:SetAttribute("RateOfFire", nil)
+        tool:SetAttribute("rateOfFire", nil)
+    end
+end
+
+local function WatchContainer(container)
+    if not container then return end
+    for _, item in ipairs(container:GetChildren()) do ApplyToTool(item) end
+    local conn = container.ChildAdded:Connect(ApplyToTool)
+    table.insert(rfConnections, conn)
+end
+
+local function SetupRapidFire(character)
+    for _, conn in ipairs(rfConnections) do conn:Disconnect() end
+    table.clear(rfConnections)
+    WatchContainer(character)
+    WatchContainer(LocalPlayer:WaitForChild("Backpack"))
+end
+
+if LocalPlayer.Character then SetupRapidFire(LocalPlayer.Character) end
+LocalPlayer.CharacterAdded:Connect(SetupRapidFire)
+
+-- 14. SPEED / INF JUMP / NOCLIP
 local defaultSpeed = 16
 local function ApplySpeed()
     local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
@@ -513,7 +541,7 @@ local function ToggleNoclip(state)
         for _, part in ipairs(char:GetDescendants()) do if part:IsA("BasePart") and part.CanCollide then part.CanCollide = false end end
     end)
 end
--- 14. DEVICE SPOOFER & MINECRAFT
+-- 15. DEVICE SPOOFER & MINECRAFT
 local function ToggleDeviceSpoofer(state)
     if not state then return end
     local remote = game:GetService("ReplicatedStorage"):WaitForChild("PVP_DeviceReport", 5)
@@ -551,7 +579,7 @@ local function ToggleMinecraft(state)
     end
 end
 
--- 15. MODERN UI
+-- 16. MODERN UI
 local Gui = Instance.new("ScreenGui", CoreGui)
 Gui.Name = "TheooJutFusion"; Gui.ResetOnSpawn = false
 
@@ -750,11 +778,11 @@ SelectTab(CombatPage, btnCombat)
 CreateToggle(CombatPage, "Silent Aim", false, function(v) Config.SilentAim = v end)
 CreateToggle(CombatPage, "100% Aimbot", false, function(v) Config.Aimbot100 = v end)
 CreateToggle(CombatPage, "Max Cam Lock", false, function(v) Config.MaxCamLock = v end)
-CreateToggle(CombatPage, "TP Lock (Follow)", false, function(v) Config.TPLock = v end)
 CreateToggle(CombatPage, "Aim Assist", false, function(v) Config.AimAssist = v end)
 CreateSlider(CombatPage, "Aim Smoothness", 1, 20, 5, function(v) Config.AimAssistSmooth = v end)
 CreateToggle(CombatPage, "Wall Check", true, function(v) Config.WallCheck = v end)
 CreateSlider(CombatPage, "FOV Size", 50, 500, 200, function(v) Config.FovSize = v end)
+CreateToggle(CombatPage, "Rapid Fire", false, function(v) Config.RapidFire = v; SetupRapidFire(LocalPlayer.Character) end)
 CreateToggle(CombatPage, "Godmode", false, ToggleGodmode)
 CreateToggle(CombatPage, "Hitbox Expander", false, function(v) Config.Hitbox = v; if not v then ResetHitboxes() end end)
 CreateSlider(CombatPage, "Hitbox Size", 5, 50, 20, function(v) Config.HitboxSize = v end)
@@ -769,14 +797,44 @@ CreateToggle(MiscPage, "Infinite Jump", false, function(v) Config.InfJump = v en
 CreateToggle(MiscPage, "Noclip", false, function(v) Config.Noclip = v; ToggleNoclip(v) end)
 CreateToggle(MiscPage, "Device Spoofer (PC)", false, ToggleDeviceSpoofer)
 
--- 16. TP TO PLAYER LOGIC
+-- 17. TP TO PLAYER & CAMERA TP TOGGLE
+local tpHeader = Instance.new("TextLabel", TPPage)
+tpHeader.Size = UDim2.new(1, 0, 0, 20)
+tpHeader.BackgroundTransparency = 1
+tpHeader.Text = "Camera TP"
+tpHeader.TextColor3 = Color3.fromRGB(255, 255, 255)
+tpHeader.Font = Enum.Font.GothamBold
+tpHeader.TextSize = 12
+tpHeader.TextXAlignment = Enum.TextXAlignment.Left
+
+CreateToggle(TPPage, "Camera TP", false, function(v) 
+    Config.FloatTPGui = v
+    if floatGui then floatGui.Enabled = v end
+    if not v and Config.CameraActive then StopTPCam() end
+end)
+
+local separator = Instance.new("Frame", TPPage)
+separator.Size = UDim2.new(1, 0, 0, 2)
+separator.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+separator.BorderSizePixel = 0
+
+local tpHeader2 = Instance.new("TextLabel", TPPage)
+tpHeader2.Size = UDim2.new(1, 0, 0, 20)
+tpHeader2.BackgroundTransparency = 1
+tpHeader2.Text = "TP to Player"
+tpHeader2.TextColor3 = Color3.fromRGB(255, 255, 255)
+tpHeader2.Font = Enum.Font.GothamBold
+tpHeader2.TextSize = 12
+tpHeader2.TextXAlignment = Enum.TextXAlignment.Left
+
 local function RefreshTPList()
     for _, v in ipairs(TPPage:GetChildren()) do
-        if v:IsA("TextButton") and v.Name ~= "" then v:Destroy() end
+        if v:IsA("TextButton") and v.Name == "TPPlayerBtn" then v:Destroy() end
     end
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= LocalPlayer then
             local btn = Instance.new("TextButton", TPPage)
+            btn.Name = "TPPlayerBtn"
             btn.Size = UDim2.new(1, 0, 0, 30)
             btn.BackgroundColor3 = Color3.fromRGB(40, 120, 70)
             btn.Text = "TP to " .. plr.Name
@@ -800,7 +858,7 @@ RefreshTPList()
 Players.PlayerAdded:Connect(RefreshTPList)
 Players.PlayerRemoving:Connect(function() task.wait(0.5); RefreshTPList() end)
 
--- 17. ALKEDION REDEEMER
+-- 18. ALKEDION REDEEMER
 local redeemBtn = Instance.new("TextButton", RedeemPage)
 redeemBtn.Size = UDim2.new(1, 0, 0, 40)
 redeemBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
@@ -826,7 +884,7 @@ redeemBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- 18. DRAG & ICON
+-- 19. DRAG & ICON
 local dragging, dragInput, dragStart, startPos
 TopBar.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -858,7 +916,7 @@ Instance.new("UICorner", Icon).CornerRadius = UDim.new(1, 0)
 Instance.new("UIStroke", Icon).Color = Color3.fromRGB(255, 255, 255)
 Icon.Activated:Connect(function() Main.Visible = not Main.Visible end)
 
--- 19. FINAL LOOP
+-- 20. FINAL LOOP
 RunService.RenderStepped:Connect(function()
     UpdateChams()
 end)
