@@ -150,42 +150,188 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     end
     return oldNamecall(self, ...)
 end)
--- 8. RENDER LOOP (Aim Assist, 100% Aimbot, Max Cam Lock, TP Lock, Camera TP)
-UserInputService.InputChanged:Connect(function(input)
-    if Config.CameraTP and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) and input.Delta then
-        tpCamRotation = tpCamRotation * CFrame.Angles(0, math.rad(-input.Delta.X * 0.4), 0) * CFrame.Angles(math.rad(-input.Delta.Y * 0.4), 0, 0)
+-- 8. RENDER LOOP (Aimbot, Cam Lock, TP Lock, Jut Camera TP)
+local floatGui = Instance.new("ScreenGui", CoreGui)
+floatGui.Name = "FloatingTPCam"
+floatGui.ResetOnSpawn = false
+floatGui.Enabled = false
+
+local tpCamBtn = Instance.new("TextButton", floatGui)
+tpCamBtn.Size = UDim2.fromOffset(100, 40)
+tpCamBtn.Position = UDim2.new(0, 20, 0.5, 50)
+tpCamBtn.BackgroundColor3 = Color3.fromRGB(155, 90, 255) -- Purple default
+tpCamBtn.Text = "TP CAM"
+tpCamBtn.TextColor3 = Color3.new(1,1,1)
+tpCamBtn.Font = Enum.Font.GothamBold
+tpCamBtn.TextSize = 12
+Instance.new("UICorner", tpCamBtn).CornerRadius = UDim.new(0, 8)
+
+local moveVec = Vector3.new(0,0,0)
+local lookTouch = nil
+local mobileCtrl = Instance.new("Frame", floatGui)
+mobileCtrl.Size = UDim2.fromScale(1,1)
+mobileCtrl.BackgroundTransparency = 1
+mobileCtrl.Visible = false
+
+-- Joystick for movement
+local stick = Instance.new("Frame", mobileCtrl)
+stick.Size = UDim2.fromOffset(100, 100)
+stick.Position = UDim2.new(0, 30, 1, -130)
+stick.BackgroundColor3 = Color3.fromRGB(20,20,30)
+stick.BackgroundTransparency = 0.5
+Instance.new("UICorner", stick).CornerRadius = UDim.new(1,0)
+
+local knob = Instance.new("Frame", stick)
+knob.Size = UDim2.fromOffset(40, 40)
+knob.Position = UDim2.new(0.5,-20,0.5,-20)
+knob.BackgroundColor3 = Color3.fromRGB(155, 90, 255)
+knob.BackgroundTransparency = 0.2
+Instance.new("UICorner", knob).CornerRadius = UDim.new(1,0)
+
+-- Up/Down buttons
+local upBtn = Instance.new("TextButton", mobileCtrl)
+upBtn.Size = UDim2.fromOffset(40, 40)
+upBtn.Position = UDim2.new(1, -60, 1, -180)
+upBtn.BackgroundColor3 = Color3.fromRGB(40,40,60)
+upBtn.Text = "↑"
+upBtn.TextColor3 = Color3.new(1,1,1)
+upBtn.TextSize = 20
+Instance.new("UICorner", upBtn).CornerRadius = UDim.new(0,8)
+
+local downBtn = Instance.new("TextButton", mobileCtrl)
+downBtn.Size = UDim2.fromOffset(40, 40)
+downBtn.Position = UDim2.new(1, -60, 1, -130)
+downBtn.BackgroundColor3 = Color3.fromRGB(40,40,60)
+downBtn.Text = "↓"
+downBtn.TextColor3 = Color3.new(1,1,1)
+downBtn.TextSize = 20
+Instance.new("UICorner", downBtn).CornerRadius = UDim.new(0,8)
+
+-- Look frame
+local lookFrame = Instance.new("TextButton", mobileCtrl)
+lookFrame.Size = UDim2.new(0.6, 0, 1, 0)
+lookFrame.Position = UDim2.new(0.4, 0, 0, 0)
+lookFrame.BackgroundTransparency = 1
+lookFrame.Text = ""
+
+local _up, _down, stickTouch, stickStart = false, false, nil, nil
+
+stick.InputBegan:Connect(function(input) 
+    if input.UserInputType == Enum.UserInputType.Touch then 
+        stickTouch = input; stickStart = input.Position
+        input.Changed:Connect(function() 
+            if input.UserInputState == Enum.UserInputState.End then 
+                stickTouch = nil; knob.Position = UDim2.new(0.5,-20,0.5,-20); moveVec = Vector3.new(0,0,0) 
+            end 
+        end) 
+    end 
+end)
+
+UserInputService.InputChanged:Connect(function(input) 
+    if stickTouch and input == stickTouch then 
+        local d = input.Position - stickStart
+        local m = math.min(d.Magnitude, 50)
+        local dir = d.Magnitude > 0 and d.Unit or Vector2.new(0,0)
+        knob.Position = UDim2.new(0.5,-20 + dir.X*m, 0.5,-20 + dir.Y*m)
+        moveVec = Vector3.new(dir.X, -dir.Y, 0) * (m/50)
+    end 
+end)
+
+lookFrame.InputBegan:Connect(function(input) 
+    if input.UserInputType == Enum.UserInputType.Touch then 
+        lookTouch = input
+        input.Changed:Connect(function() 
+            if input.UserInputState == Enum.UserInputState.End then lookTouch = nil end 
+        end) 
+    end 
+end)
+
+UserInputService.InputChanged:Connect(function(input) 
+    if Config.CameraTP and lookTouch and input == lookTouch and input.Delta then 
+        tpCamRotation = tpCamRotation * CFrame.Angles(0, math.rad(-input.Delta.X * 0.4), 0) * CFrame.Angles(math.rad(-input.Delta.Y * 0.4), 0, 0) 
+    end 
+end)
+
+upBtn.InputBegan:Connect(function(i) 
+    if i.UserInputType == Enum.UserInputType.Touch then 
+        _up = true
+        i.Changed:Connect(function() if i.UserInputState == Enum.UserInputState.End then _up = false end end) 
+    end 
+end)
+
+downBtn.InputBegan:Connect(function(i) 
+    if i.UserInputType == Enum.UserInputType.Touch then 
+        _down = true
+        i.Changed:Connect(function() if i.UserInputState == Enum.UserInputState.End then _down = false end end) 
+    end 
+end)
+
+local function StartTPCam()
+    local cam = Workspace.CurrentCamera
+    tpCamRotation = cam.CFrame - cam.CFrame.Position
+    cam.CameraType = Enum.CameraType.Scriptable
+    Config.CameraActive = true
+    mobileCtrl.Visible = true
+    tpCamBtn.BackgroundColor3 = Color3.fromRGB(40, 150, 80) -- Green
+    tpCamBtn.Text = "CLICK HERE TO TP"
+    
+    if tpCamConn then tpCamConn:Disconnect() end
+    tpCamConn = RunService.RenderStepped:Connect(function(dt)
+        if not Config.CameraActive then return end
+        local c = Workspace.CurrentCamera
+        if c.CameraType ~= Enum.CameraType.Scriptable then c.CameraType = Enum.CameraType.Scriptable end
+        
+        local move = Vector3.new(0,0,0)
+        if moveVec.Magnitude > 0.1 then 
+            move += tpCamRotation.LookVector * moveVec.Y
+            move += tpCamRotation.RightVector * moveVec.X 
+        end
+        if _up then move += Vector3.new(0,1,0) end
+        if _down then move -= Vector3.new(0,1,0) end
+        
+        if move.Magnitude > 0 then 
+            c.CFrame = CFrame.new(c.CFrame.Position + move.Unit * 140 * dt) * tpCamRotation 
+        else 
+            c.CFrame = CFrame.new(c.CFrame.Position) * tpCamRotation 
+        end
+    end)
+end
+
+local function StopTPCam()
+    Config.CameraActive = false
+    mobileCtrl.Visible = false
+    tpCamBtn.BackgroundColor3 = Color3.fromRGB(155, 90, 255) -- Purple
+    tpCamBtn.Text = "TP CAM"
+    if tpCamConn then tpCamConn:Disconnect(); tpCamConn = nil end
+    local cam = Workspace.CurrentCamera
+    if cam then 
+        cam.CameraType = Enum.CameraType.Custom
+        if LocalPlayer.Character then cam.CameraSubject = LocalPlayer.Character:FindFirstChildOfClass("Humanoid") end
+    end
+end
+
+tpCamBtn.Activated:Connect(function()
+    if not Config.CameraActive then 
+        StartTPCam() 
+    else 
+        local cam = Workspace.CurrentCamera
+        if cam and LocalPlayer.Character then 
+            local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then 
+                hrp.CFrame = CFrame.new(cam.CFrame.Position + (cam.CFrame.LookVector * 3)) 
+            end 
+        end
+        StopTPCam() 
     end
 end)
 
+-- RENDER LOOP
 RunService.RenderStepped:Connect(function(dt)
     if Config.SilentAim then SilentTarget = GetTarget() else SilentTarget = nil end
     local targetPart = GetTarget()
 
-    -- Camera TP Logic
-    if Config.CameraTP then
-        Camera.CameraType = Enum.CameraType.Scriptable
-        if not tpCamConn then
-            tpCamConn = RunService.RenderStepped:Connect(function(d)
-                local c = Workspace.CurrentCamera
-                local move = Vector3.new(0,0,0)
-                if UserInputService:IsKeyDown(Enum.KeyCode.W) then move += tpCamRotation.LookVector end
-                if UserInputService:IsKeyDown(Enum.KeyCode.S) then move -= tpCamRotation.LookVector end
-                if UserInputService:IsKeyDown(Enum.KeyCode.A) then move -= tpCamRotation.RightVector end
-                if UserInputService:IsKeyDown(Enum.KeyCode.D) then move += tpCamRotation.RightVector end
-                
-                if move.Magnitude > 0 then c.CFrame = CFrame.new(c.CFrame.Position + move.Unit * Config.TPCamSpeed * d) * tpCamRotation else c.CFrame = CFrame.new(c.CFrame.Position) * tpCamRotation end
-            end)
-        end
-    else
-        if tpCamConn then tpCamConn:Disconnect(); tpCamConn = nil end
-        if Camera.CameraType == Enum.CameraType.Scriptable then
-            Camera.CameraType = Enum.CameraType.Custom
-            if LocalPlayer.Character then Camera.CameraSubject = LocalPlayer.Character:FindFirstChildOfClass("Humanoid") end
-        end
-    end
-
-    -- Aiming & Locking Logic
-    if targetPart and not Config.CameraTP then
+    -- Aiming Logic (Kapag hindi naka Camera TP)
+    if targetPart and not Config.CameraActive then
         if Config.AimAssist then
             local smoothFactor = math.clamp(1 / Config.AimAssistSmooth, 0.01, 1)
             local newCFrame = CFrame.lookAt(Camera.CFrame.Position, targetPart.Position)
@@ -206,7 +352,6 @@ RunService.RenderStepped:Connect(function(dt)
         end
     end
     
-    -- Update Hitboxes
     if Config.Hitbox then UpdateHitboxes() end
 end)
 
@@ -610,10 +755,15 @@ SelectTab(CombatPage, btnCombat)
 
 -- UI FILLING
 CreateToggle(CombatPage, "Silent Aim", false, function(v) Config.SilentAim = v end)
-CreateToggle(CombatPage, "100% Aimbot", false, function(v) Config.Aimbot100 = v end)
-CreateToggle(CombatPage, "Max Cam Lock", false, function(v) Config.MaxCamLock = v end)
-CreateToggle(CombatPage, "Camera TP (Fly)", false, function(v) Config.CameraTP = v end)
+CreateToggle(CombatPage, "100% Aimbot", false, function(v) Config.Aimbot100 = v end
 CreateToggle(CombatPage, "TP Lock (Follow)", false, function(v) Config.TPLock = v end)
+CreateToggle(CombatPage, "Camera TP (Fly)", false, function(v) 
+    Config.CameraTP = v
+    floatGui.Enabled = v
+    if not v and Config.CameraActive then
+        StopTPCam() -- Para bumalik sa normal kung biglang i-off
+    end
+end)
 CreateToggle(CombatPage, "Aim Assist", false, function(v) Config.AimAssist = v end)
 CreateSlider(CombatPage, "Aim Smoothness", 1, 20, 5, function(v) Config.AimAssistSmooth = v end)
 CreateToggle(CombatPage, "Wall Check", true, function(v) Config.WallCheck = v end)
