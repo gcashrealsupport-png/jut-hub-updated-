@@ -1,0 +1,232 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LuaShield — Lua Analyzer</title>
+<style>
+:root{color-scheme:dark;--bg:#080b16;--panel:#111629;--line:#292f4b;--purple:#8955ff;--text:#eef0ff;--muted:#9ca6c6}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px system-ui,sans-serif}
+header{padding:18px 5%;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+.logo{font-size:22px;font-weight:800}.logo span{color:var(--purple)}
+main{max-width:1250px;margin:auto;padding:30px 18px}
+h1{font-size:clamp(28px,5vw,44px);margin:0}
+h1 span{color:var(--purple)}
+p{color:var(--muted);line-height:1.6}
+.toolbar{display:flex;gap:9px;flex-wrap:wrap;margin:20px 0}
+button,.upload{background:#1a2035;border:1px solid var(--line);color:white;padding:10px 14px;border-radius:8px;cursor:pointer;font:inherit}
+button:hover,.upload:hover{border-color:var(--purple)}
+.primary{background:var(--purple);border-color:var(--purple);font-weight:700}
+.workspace{display:grid;grid-template-columns:1fr 1fr;gap:15px}
+.panel,.report{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.panelhead{padding:14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+textarea{width:100%;min-height:360px;resize:vertical;background:#0b1020;color:#c4b5fd;border:0;outline:0;padding:15px;font:13px/1.7 Consolas,monospace}
+.report{margin-top:16px;padding:18px;display:none}
+.reportgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:15px}
+.reportgrid div{border-right:1px solid var(--line);padding-right:10px}
+small{color:var(--muted)}
+footer{text-align:center;color:var(--muted);padding:25px}
+@media(max-width:750px){.workspace{grid-template-columns:1fr}.reportgrid{grid-template-columns:1fr 1fr}textarea{min-height:260px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">🛡 Lua<span>Shield</span></div>
+  <small>Static Analysis · No Execution</small>
+</header>
+
+<main>
+  <h1>Advanced Smart<br><span>Lua Deobfuscator</span></h1>
+  <p>Analyze Lua source, decode supported escaped strings, identify common obfuscation clues, and export a report. Works locally in your browser.</p>
+
+  <div class="toolbar">
+    <label class="upload">Upload Lua<input id="file" type="file" accept=".lua,.txt" hidden></label>
+    <button class="primary" id="analyze">Analyze Code</button>
+    <button id="downloadLua">Download Lua</button>
+    <button id="downloadReport">Download Report</button>
+    <button id="clear">Clear</button>
+  </div>
+
+  <div class="workspace">
+    <section class="panel">
+      <div class="panelhead"><b>Input Lua Code</b><small id="count">0 characters</small></div>
+      <textarea id="input" spellcheck="false" placeholder="Paste obfuscated Lua code here..."></textarea>
+    </section>
+    <section class="panel">
+      <div class="panelhead"><b>Analysis Output</b><small id="status">Ready</small></div>
+      <textarea id="output" spellcheck="false" readonly placeholder="Analysis output appears here..."></textarea>
+    </section>
+  </div>
+
+  <section class="report" id="report">
+    <h3>Analysis Report</h3>
+    <div class="reportgrid">
+      <div><b>Detected</b><p id="detected">Unknown</p></div>
+      <div><b>Techniques</b><p id="techniques">None identified</p></div>
+      <div><b>Statistics</b><p id="stats">—</p></div>
+      <div><b>Limitations</b><p>Heuristic results only. Complex control flow and remote payloads are not reconstructed.</p></div>
+    </div>
+  </section>
+</main>
+<footer>LuaShield · Local browser analysis · Never runs submitted code</footer>
+
+<script>
+"use strict";
+
+const $ = id => document.getElementById(id);
+let reportData = null;
+
+$("input").addEventListener("input", () => {
+  $("count").textContent = $("input").value.length + " characters";
+});
+
+$("file").addEventListener("change", async event => {
+  const file = event.target.files[0];
+  if (!file) return;
+  $("input").value = await file.text();
+  $("input").dispatchEvent(new Event("input"));
+});
+
+function decodeString(token) {
+  const quote = token[0];
+  if (token[token.length - 1] !== quote) return null;
+
+  const body = token.slice(1, -1);
+  let out = "";
+
+  for (let i = 0; i < body.length; i++) {
+    if (body[i] !== "\\") {
+      out += body[i];
+      continue;
+    }
+
+    const next = body[++i];
+    if (next === undefined) return null;
+
+    const map = {
+      a:"\x07", b:"\b", f:"\f", n:"\n", r:"\r",
+      t:"\t", v:"\x0b", "\\":"\\", "'":"'", '"':'"'
+    };
+
+    if (Object.hasOwn(map, next)) {
+      out += map[next];
+    } else if (/[0-9]/.test(next)) {
+      let digits = next;
+      while (digits.length < 3 && /[0-9]/.test(body[i+1] || "")) {
+        digits += body[++i];
+      }
+      const number = Number(digits);
+      if (number > 255) return null;
+      out += String.fromCharCode(number);
+    } else if (next === "x" && /^[0-9a-fA-F]{2}$/.test(body.slice(i+1,i+3))) {
+      out += String.fromCharCode(parseInt(body.slice(i+1,i+3),16));
+      i += 2;
+    } else {
+      return null;
+    }
+  }
+  return out;
+}
+
+function toLuaLongString(value) {
+  let eq = "";
+  while (value.includes("]" + eq + "]")) eq += "=";
+  return "[" + eq + "[" + value + "]" + eq + "]";
+}
+
+function analyze() {
+  const source = $("input").value;
+  if (!source.trim()) {
+    alert("Paste or upload Lua source first.");
+    return;
+  }
+
+  let decoded = 0;
+  const output = source.replace(
+    /"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g,
+    token => {
+      const value = decodeString(token);
+      if (value === null) return token;
+      decoded++;
+      return toLuaLongString(value);
+    }
+  );
+
+  const signatures = [
+    ["MoonSec", /moonsec/i],
+    ["Minevile", /minevile/i],
+    ["Luraph", /luraph|LPH_/i],
+    ["Obfuscar", /obfuscar/i]
+  ];
+
+  const found = signatures.find(([,pattern]) => pattern.test(source));
+  const detected = found ? found[0] : "Unknown / Custom";
+
+  const clues = [];
+  if (/loadstring/.test(source)) clues.push("Dynamic code loading");
+  if (/string\.char|string\.byte/.test(source)) clues.push("String construction");
+  if (/getfenv|setfenv/.test(source)) clues.push("Environment manipulation");
+  if (/while[\s\S]{0,500}(?:state|step|index)\s*=/.test(source))
+    clues.push("Possible control-flow dispatcher");
+  if (/\\[0-9]{1,3}|\\x[0-9a-f]{2}/i.test(source))
+    clues.push("Escaped string constants");
+
+  $("output").value = output;
+  $("status").textContent = "Analysis complete";
+  $("report").style.display = "block";
+  $("detected").textContent = detected;
+  $("techniques").textContent = clues.join(", ") || "No known clues";
+  $("stats").textContent =
+    "Input: " + source.length + " chars\nDecoded strings: " + decoded;
+
+  reportData = {
+    tool: "LuaShield",
+    detectedObfuscator: detected,
+    techniques: clues,
+    decodedStringCount: decoded,
+    inputCharacters: source.length,
+    outputCharacters: output.length,
+    notes: [
+      "Heuristic detection; not a guaranteed identification.",
+      "This page does not execute Lua.",
+      "No remote code is fetched.",
+      "This is not a complete AST or control-flow deobfuscator."
+    ]
+  };
+}
+
+function saveFile(name, content, type) {
+  const blob = new Blob([content], {type});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+$("analyze").addEventListener("click", analyze);
+
+$("downloadLua").addEventListener("click", () => {
+  if (!$("output").value) return alert("Analyze code first.");
+  saveFile("luashield-output.lua", $("output").value, "text/plain");
+});
+
+$("downloadReport").addEventListener("click", () => {
+  if (!reportData) return alert("Analyze code first.");
+  saveFile("luashield-report.json", JSON.stringify(reportData,null,2), "application/json");
+});
+
+$("clear").addEventListener("click", () => {
+  $("input").value = "";
+  $("output").value = "";
+  $("report").style.display = "none";
+  $("status").textContent = "Ready";
+  $("count").textContent = "0 characters";
+  reportData = null;
+});
+</script>
+</body>
+</html>
